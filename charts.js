@@ -261,13 +261,52 @@ async function fetchQqqxHistory() {
   }
 }
 
+// ---- Fetch SPCXBANK historical OHLC (5-min bars, just-launched tokens) ---
+async function fetchSpcxbankHistory(mint) {
+  if (!mint) return null;
+  try {
+    const pools = await corsJson(`https://api.geckoterminal.com/api/v2/networks/solana/tokens/${mint}/pools`);
+    const topPool = pools?.data?.[0];
+    if (!topPool) return null;
+    const poolAddr = topPool.attributes.address;
+    // 5-minute bars work well for newly-launched tokens (more granular than daily).
+    const ohlc = await corsJson(`https://api.geckoterminal.com/api/v2/networks/solana/pools/${poolAddr}/ohlcv/minute?aggregate=5&limit=144`);
+    const list = ohlc?.data?.attributes?.ohlcv_list || [];
+    const points = list.map(r => ({ time: r[0], value: parseFloat(r[4]) }))
+                       .filter(p => isFinite(p.value) && p.value > 0)
+                       .sort((a, b) => a.time - b.time);
+    return points.length >= 2 ? points : null;
+  } catch (e) { console.warn('fetchSpcxbankHistory failed', e); return null; }
+}
+
 // ---- Initialize all four charts in the #charts section ----------------
 function initSectionCharts() {
-  drawPreLaunchChart(document.getElementById('chart-spcxbank'), {
-    placeholder: 'PRE-LAUNCH · $SPCXBANK PRICE',
-    subtext: 'Live price chart starts once the token is deployed.',
+  // ---------- $SPCXBANK chart ----------
+  const spcxCanvas = document.getElementById('chart-spcxbank');
+  drawPreLaunchChart(spcxCanvas, {
+    placeholder: 'LOADING $SPCXBANK ...',
+    subtext: 'Fetching 5-min OHLC bars from GeckoTerminal',
+  });
+  // SPCXBANK_MINT is declared in solana.js (loaded before charts.js).
+  const spcxMint = typeof SPCXBANK_MINT !== 'undefined' ? SPCXBANK_MINT : null;
+  fetchSpcxbankHistory(spcxMint).then(points => {
+    if (points && points.length >= 2) {
+      drawLiveChart(spcxCanvas, points, {
+        yFmt: v => v < 0.01 ? '$' + v.toFixed(8) : v < 1 ? '$' + v.toFixed(6) : '$' + v.toFixed(2),
+        dateFmt: t => {
+          const d = new Date(t * 1000);
+          return d.getUTCHours().toString().padStart(2,'0') + ':' + d.getUTCMinutes().toString().padStart(2,'0');
+        },
+      });
+    } else {
+      drawPreLaunchChart(spcxCanvas, {
+        placeholder: '$SPCXBANK · INDEXING',
+        subtext: 'GeckoTerminal usually takes a few minutes after launch.',
+      });
+    }
   });
 
+  // ---------- QQQx chart ----------
   const qqqxCanvas = document.getElementById('chart-qqqx');
   drawPreLaunchChart(qqqxCanvas, {
     placeholder: 'LOADING QQQx HISTORICAL ...',
@@ -291,13 +330,16 @@ function initSectionCharts() {
     }
   });
 
+  // ---------- HOLDERS + DISTRIBUTIONS charts ----------
+  // These need time-series of on-chain state which is NOT in any indexer
+  // we currently call. They will activate once we add a snapshot logger.
   drawPreLaunchChart(document.getElementById('chart-holders'), {
-    placeholder: 'PRE-LAUNCH · HOLDER GROWTH',
-    subtext: 'Holder count over time · begins at first $SPCXBANK trade.',
+    placeholder: 'HOLDER GROWTH · ACCUMULATING DATA',
+    subtext: 'Time-series snapshot logger lands in a future update.',
   });
   drawPreLaunchChart(document.getElementById('chart-dist'), {
-    placeholder: 'PRE-LAUNCH · DISTRIBUTION HISTORY',
-    subtext: 'Cumulative USD distributed · starts at the first sweep.',
+    placeholder: 'DISTRIBUTION HISTORY · AWAITING FIRST SWEEP',
+    subtext: 'Each sweep adds one bar — chart starts as soon as you run keeper-distribute.js.',
   });
 }
 

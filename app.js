@@ -396,8 +396,7 @@ async function loadDistribsLedger() {
 // ============================================================
 async function loadHoldersLedger() {
   try {
-    // 1. Fetch every $SPCXBANK token account via jsonParsed encoding.
-    //    SPCXBANK is on Token-2022 (TokenzQdBN...), not classic SPL Token.
+    // 1. Fetch every $SPCXBANK token account (Token-2022 program).
     const accounts = await rpc('getProgramAccounts', [
       TOKEN_2022_PROGRAM,
       {
@@ -409,47 +408,47 @@ async function loadHoldersLedger() {
       },
     ]);
 
-    // 2. Build holder list sorted by balance desc.
     const holders = accounts
       .map(a => {
         const info = a.account.data.parsed.info;
-        return {
-          owner: info.owner,
-          bal:   parseFloat(info.tokenAmount.uiAmountString),
-        };
+        return { owner: info.owner, bal: parseFloat(info.tokenAmount.uiAmountString) };
       })
       .filter(h => h.bal > 0)
       .sort((a, b) => b.bal - a.bal)
-      .slice(0, 200) // dashboard caps at top 200 holders
+      .slice(0, 200)
       .map((h, i) => ({ rank: i + 1, addr: h.owner, bal: h.bal }));
 
-    // 3. Pull supply + treasury QQQx reserve + QQQx live price in parallel
-    //    so we can derive each holder's pro-rata QQQx allocation + USD.
-    const [supply, qqqxReserve, qqqxPrice] = await Promise.all([
+    // 2. Pull supply + QQQx live price + treasury's QQQx-OUT history.
+    //    QQQx RECEIVED for each holder = sum of QQQx outflows FROM treasury
+    //    TO that holder. Before any sweep happens, every holder's number is 0.
+    const [supply, qqqxPrice, txs] = await Promise.all([
       getSpcxbankSupply().catch(() => null),
-      getTreasuryQQQx().catch(() => 0),
       getQqqxPriceUsd().catch(() => null),
+      getTreasuryEnhancedTxs(100).catch(() => []),
     ]);
+    const outs = extractQqqxTransfers(txs, 'out');
+    const qqqxReceivedByOwner = new Map();
+    for (const t of outs) {
+      qqqxReceivedByOwner.set(t.to, (qqqxReceivedByOwner.get(t.to) || 0) + t.amount);
+    }
 
-    // 4. Wire to makeLedgerPager — 15/page, prev/next handled automatically.
     makeLedgerPager('ledger-holders', holders, h => {
-      const share     = supply ? h.bal / supply : 0;
-      const qqqxAlloc = qqqxReserve ? share * qqqxReserve : 0;
-      const usd       = qqqxPrice ? qqqxAlloc * qqqxPrice : 0;
+      const share    = supply ? h.bal / supply : 0;
+      const received = qqqxReceivedByOwner.get(h.addr) || 0;
+      const usd      = qqqxPrice ? received * qqqxPrice : 0;
       return `
         <div class="bet-item">
           <span class="bet-id">${String(h.rank).padStart(2,'0')}</span>
           <span class="bet-claim">${shortAddr(h.addr)}</span>
           <span class="bet-stake">${h.bal.toLocaleString()}</span>
           <span class="bet-deadline">${(share * 100).toFixed(3)}%</span>
-          <span class="bet-stake">${qqqxAlloc.toFixed(4)} QQQx</span>
-          <span class="bet-stake">$${usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+          <span class="bet-stake">${received > 0 ? received.toFixed(4) + ' QQQx' : '0 QQQx'}</span>
+          <span class="bet-stake">${usd > 0 ? '$' + usd.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '$0'}</span>
           <a class="bet-action" href="https://solscan.io/account/${h.addr}" target="_blank" rel="noopener">solscan</a>
         </div>`;
     });
   } catch (e) {
-    console.warn('loadHoldersLedger failed (RPC limit? wrong mint?)', e);
-    // Empty skeleton rows stay in place on failure — no harm done.
+    console.warn('loadHoldersLedger failed', e);
   }
 }
 
