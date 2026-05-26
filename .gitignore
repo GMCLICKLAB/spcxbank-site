@@ -1,0 +1,25 @@
+# --- Claude / dev tooling caches ---
+.claude/
+.playwright-mcp/
+
+# --- Node (for keeper-distribute.js local runs) ---
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Secrets (never commit these even by accident) ---
+.env
+.env.*
+*.key
+*.keypair.json
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+
+# --- Debug screenshots / test pngs collected during dev ---
+# Keep only the actual logo. Exclude everything else by default.
+*.png
+!SPCXBANK.png

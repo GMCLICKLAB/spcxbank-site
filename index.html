@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>$SPCXBANK — The SpaceX Bank, on Solana</title>
+<meta name="description" content="$SPCXBANK is an SPL token treasury on Solana. We bank QQQx for you. When SpaceX joins NDX, your bank grows automatically.">
+<link rel="icon" type="image/png" href="SPCXBANK.png">
+<link rel="apple-touch-icon" href="SPCXBANK.png">
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=IBM+Plex+Mono:wght@400;500;600;700&family=Noto+Sans+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- ============ STATUS BAR ============ -->
+    <div class="status-bar">
+      <span class="name">$SPCXBANK.PROTOCOL</span>
+      <span class="status-bar-right">
+        <button class="status-btn code-trigger" type="button">CODE</button>
+        <a href="https://x.com/SPCXBANK" target="_blank" rel="noopener" class="status-btn" id="link-twitter">TWITTER</a>
+        <button class="status-btn" id="top-connect">CONNECT</button>
+      </span>
+    </div>
+
+    <!-- ============ HEADER ============ -->
+    <header class="header">
+      <div class="logo-block">
+        <div class="logo-ascii-wrap">
+<pre class="logo-pre">███████╗██████╗  ██████╗██╗  ██╗██████╗  █████╗ ███╗   ██╗██╗  ██╗
+██╔════╝██╔══██╗██╔════╝╚██╗██╔╝██╔══██╗██╔══██╗████╗  ██║██║ ██╔╝
+███████╗██████╔╝██║      ╚███╔╝ ██████╔╝███████║██╔██╗ ██║█████╔╝
+╚════██║██╔═══╝ ██║      ██╔██╗ ██╔══██╗██╔══██║██║╚██╗██║██╔═██╗
+███████║██║     ╚██████╗██╔╝ ██╗██████╔╝██║  ██║██║ ╚████║██║  ██╗
+╚══════╝╚═╝      ╚═════╝╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝</pre>
+        </div>
+      </div>
+    </header>
+
+    <!-- ============ TICKER ============ -->
+    <div class="ticker-bar">
+      <div class="ticker-track" id="ticker-track">
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+    <!-- ============ HERO ============ -->
+    <section class="hero">
+      <div>
+        <h1 class="hero-headline">
+          Fifteen trading days after the SpaceX IPO,<br>
+          Nasdaq-100 is forced to include it.<br>
+          Hold $SPCXBANK. You're already on the rocket.
+        </h1>
+        <p class="hero-sub">
+          $430B of passive index funds must buy SpaceX. A mechanism hard-coded into Nasdaq's new rule. Not a prediction, not a narrative.
+        </p>
+        <p class="hero-sub">
+          $SPCXBANK's treasury converts every pump.fun creator fee into QQQx (the on-chain Nasdaq-100 ETF) and airdrops it pro-rata to every holder.
+        </p>
+        <p class="hero-sub">
+          When that day comes, QQQx absorbs SpaceX's weight and your balance grows with it. No claiming. No staking. No finance degree required.
+        </p>
+
+        <div class="hero-cta-row">
+          <a class="cta primary" href="https://pump.fun/" target="_blank" rel="noopener">▶ BUY $SPCXBANK</a>
+          <a class="cta" href="app.html">▶ LAUNCH APP</a>
+        </div>
+      </div>
+
+      <div class="hero-chart">
+        <div class="chart-head">
+          <span class="chart-name">NDX-100</span>
+          <span class="chart-tag">15Y · +18.6% CAGR</span>
+        </div>
+        <canvas id="ndx-chart" aria-hidden="true"></canvas>
+        <div class="chart-foot">▸ NASDAQ-100 · HISTORICAL CLOSE</div>
+      </div>
+    </section>
+
+    <!-- ============ HOW IT WORKS (flowchart + detail rows) ============ -->
+    <section class="section" id="how">
+      <div class="section-label">HOW IT WORKS<span class="section-label-en">// the full chain</span></div>
+      <p class="hero-sub" style="margin-bottom: 28px; max-width: 760px;">
+        A regulatory window meets a tokenized treasury. $430B in mandatory passive flows, captured pro-rata into every $SPCXBANK holder's wallet.
+      </p>
+
+      <!-- ===== FLOWCHART ===== -->
+      <div class="how-chart">
+        <div class="how-group">
+          <span class="how-group-label">EXTERNAL — Regulatory Trigger</span>
+          <div class="how-row">
+            <div class="how-box">
+              <span class="how-box-num">01</span>
+              <span class="how-box-title">SPCX IPO</span>
+              <span class="how-box-sub">+ Fast Entry rule</span>
+            </div>
+            <span class="how-arrow">→</span>
+            <div class="how-box">
+              <span class="how-box-num">02</span>
+              <span class="how-box-title">$430B BID</span>
+              <span class="how-box-sub">passive funds forced in</span>
+            </div>
+          </div>
+        </div>
+
+        <span class="how-bridge">⟶</span>
+
+        <div class="how-group">
+          <span class="how-group-label">INTERNAL — Protocol Capture</span>
+          <div class="how-row">
+            <div class="how-box">
+              <span class="how-box-num">03</span>
+              <span class="how-box-title">TREASURY</span>
+              <span class="how-box-sub">fees → QQQx</span>
+            </div>
+            <span class="how-arrow">→</span>
+            <div class="how-box">
+              <span class="how-box-num">04</span>
+              <span class="how-box-title">HOLDERS</span>
+              <span class="how-box-sub">pro-rata airdrop</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== DETAIL ROWS ===== -->
+      <div class="how-details">
+        <div class="how-detail">
+          <div class="how-detail-head">
+            <span class="how-detail-num">01</span>
+            <span class="how-detail-tag">EXTERNAL · REGULATION</span>
+          </div>
+          <h3>SPCX IPO + FAST ENTRY</h3>
+          <p>SpaceX files S-1 at a $1.75T target valuation. Nasdaq's new Fast Entry rule (effective May 2026) forces inclusion in NDX-100 on the 15th trading day after listing.</p>
+        </div>
+        <div class="how-detail">
+          <div class="how-detail-head">
+            <span class="how-detail-num">02</span>
+            <span class="how-detail-tag">EXTERNAL · CAPITAL FLOW</span>
+          </div>
+          <h3>$430B FORCED BID</h3>
+          <p>S&amp;P 500 trackers buy 19% of float in 6 months. Russell 1000 adds 5.5%. ~$430B in mandatory inflow into Nasdaq-100. Not a prediction — Nasdaq's rule.</p>
+        </div>
+        <div class="how-detail">
+          <div class="how-detail-head">
+            <span class="how-detail-num">03</span>
+            <span class="how-detail-tag">INTERNAL · PROTOCOL</span>
+          </div>
+          <h3>TREASURY BUYS QQQx</h3>
+          <p>Every pump.fun creator fee from $SPCXBANK trades flows into the treasury wallet, then auto-swaps to QQQx (the on-chain NDX-100 ETF) via Jupiter every 5 minutes.</p>
+        </div>
+        <div class="how-detail">
+          <div class="how-detail-head">
+            <span class="how-detail-num">04</span>
+            <span class="how-detail-tag">INTERNAL · DISTRIBUTION</span>
+          </div>
+          <h3>HOLDERS GET QQQx</h3>
+          <p>QQQx airdrops pro-rata to every $SPCXBANK wallet. NDX up = QQQx up = your wallet up. No claiming. No staking. No finance degree.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ STATS ============ -->
+    <section class="section" id="treasury">
+      <div class="section-label">ON-CHAIN DATA<span class="section-label-en">// protocol state</span></div>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">$SPCXBANK PRICE</div>
+          <div class="stat-value" id="spcxbank-price-stat">—</div>
+          <div class="stat-delta">PRE-LAUNCH</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">$SPCXBANK MARKET CAP</div>
+          <div class="stat-value" id="spcxbank-mcap-stat">—</div>
+          <div class="stat-delta">PRE-LAUNCH</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">$SPCXBANK HOLDERS</div>
+          <div class="stat-value" id="spcxbank-holders-stat">—</div>
+          <div class="stat-delta">PRE-LAUNCH</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">$SPCXBANK 24H VOL</div>
+          <div class="stat-value" id="spcxbank-vol-stat">—</div>
+          <div class="stat-delta">PRE-LAUNCH</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">QQQx PRICE</div>
+          <div class="stat-value" id="qqqx-price-stat">—</div>
+          <div class="stat-delta">NASDAQ-100 · xSTOCK</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">DISTRIBUTED · USD</div>
+          <div class="stat-value" id="distributed-usd-stat">—</div>
+          <div class="stat-delta">PRE-LAUNCH</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">DISTRIBUTED · QQQx</div>
+          <div class="stat-value" id="distributed-qqqx-stat">—</div>
+          <div class="stat-delta">PRE-LAUNCH</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">NEXT DISTRIBUTION</div>
+          <div class="stat-value" id="next-sweep">5m 00s</div>
+          <div class="stat-delta">EVERY 5 MIN</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PROTOCOL CHARTS ============ -->
+    <section class="section" id="charts">
+      <div class="section-label">CHARTS<span class="section-label-en">// protocol metrics</span></div>
+      <div class="bets-toolbar">
+        <span class="tab" data-c="spcxbank">$SPCXBANK · USD</span>
+        <span class="tab active" data-c="qqqx">QQQx · USD</span>
+        <span class="tab" data-c="holders">HOLDERS</span>
+        <span class="tab" data-c="dist">DISTRIBUTIONS · USD</span>
+        <span class="toolbar-spacer"></span>
+        <span class="toolbar-info">MCAP: <span class="c-bold" id="chart-mcap">—</span> · 24H VOL: <span class="c-bold" id="chart-vol">—</span></span>
+      </div>
+      <div class="chart-box-mono">
+        <canvas id="chart-spcxbank" style="display:none;"></canvas>
+        <canvas id="chart-qqqx"></canvas>
+        <canvas id="chart-holders" style="display:none;"></canvas>
+        <canvas id="chart-dist" style="display:none;"></canvas>
+      </div>
+    </section>
+
+    <!-- ============ DISCLAIMER ============ -->
+    <section class="section">
+      <div class="section-label">DISCLAIMER<span class="section-label-en">// read this</span></div>
+      <div class="disclaimer">
+        <div class="item"><span class="marker">[!]</span><span>$SPCXBANK is an experimental Solana SPL token. It is not a security, fund, ETF, dividend, or investment contract. Holding confers no rights in any company (including SpaceX).</span></div>
+        <div class="item"><span class="marker">[!]</span><span>QQQx distributions are deterministic on-chain treasury operations. They imply no promise of yield, dividend, profit, investment, or return.</span></div>
+        <div class="item"><span class="marker">[!]</span><span>Contract is immutable. Authorities are revoked. Every treasury operation is auditable on-chain.</span></div>
+        <div class="item"><span class="marker">[!]</span><span>Tokenized equities (QQQx) may be unavailable to US persons and other restricted jurisdictions. Check your local laws and DYOR.</span></div>
+        <div class="item"><span class="marker">[!]</span><span>The SpaceX IPO may be delayed or repriced. NDX rules may change.</span></div>
+        <div class="item"><span class="marker">[!]</span><span>This page is not investment, legal, or tax advice.</span></div>
+      </div>
+    </section>
+
+    <!-- ============ FOOTER ============ -->
+    <footer class="site-footer">
+      <span>© 2026 $SPCXBANK · <a href="https://x.com/SPCXBANK" target="_blank" rel="noopener" id="link-twitter-foot">twitter</a> · <a href="#" class="code-trigger">code</a></span>
+      <span>HOLD. SWEEP. REPEAT.</span>
+    </footer>
+
+  </div>
+
+  <!-- ============ FLOATING ROCKET + CA POPUP ============ -->
+  <div id="ca-popup" class="ca-popup" aria-hidden="false">
+    <div class="ca-popup-head">
+      <span class="ca-popup-title">▸ ON-CHAIN ADDRESSES</span>
+      <button class="ca-popup-close" id="ca-popup-close" aria-label="Close" onclick="document.getElementById('ca-popup').setAttribute('aria-hidden','true');return false;">×</button>
+    </div>
+    <div class="hero-addr" style="border:none; margin:0; padding: 4px 4px;">
+      <div class="hero-addr-row">
+        <div class="hero-addr-top">
+          <span class="hero-addr-label">$SPCXBANK · CA</span>
+          <span class="hero-addr-actions">
+            <button class="hero-addr-btn" data-addr="" data-pending="1">copy</button>
+            <a class="hero-addr-btn" href="https://pump.fun/" target="_blank" rel="noopener">pumpfun ↗</a>
+          </span>
+        </div>
+        <div class="hero-addr-value">PENDING · awaiting launch</div>
+      </div>
+      <div class="hero-addr-row">
+        <div class="hero-addr-top">
+          <span class="hero-addr-label">TREASURY</span>
+          <span class="hero-addr-actions">
+            <button class="hero-addr-btn" data-addr="GRefsnCKo9QELRL7L2bQnkKM6u1Y16VgmkX8U4HDAcFT">copy</button>
+            <a class="hero-addr-btn" href="https://solscan.io/account/GRefsnCKo9QELRL7L2bQnkKM6u1Y16VgmkX8U4HDAcFT" target="_blank" rel="noopener">solscan ↗</a>
+          </span>
+        </div>
+        <div class="hero-addr-value">GRefsnCKo9QELRL7L2bQnkKM6u1Y16VgmkX8U4HDAcFT</div>
+      </div>
+      <div class="hero-addr-row">
+        <div class="hero-addr-top">
+          <span class="hero-addr-label">QQQx · CA</span>
+          <span class="hero-addr-actions">
+            <button class="hero-addr-btn" data-addr="Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ">copy</button>
+            <a class="hero-addr-btn" href="https://solscan.io/token/Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ" target="_blank" rel="noopener">solscan ↗</a>
+          </span>
+        </div>
+        <div class="hero-addr-value">Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ</div>
+      </div>
+    </div>
+  </div>
+
+  <button id="rocket-fab" class="rocket-fab" aria-label="Toggle on-chain addresses" onclick="var p=document.getElementById('ca-popup');p.setAttribute('aria-hidden',p.getAttribute('aria-hidden')==='true'?'false':'true');"></button>
+
+  <!-- ============ CODE MODAL ============ -->
+  <div id="code-modal" class="code-modal" aria-hidden="true">
+    <div class="code-modal-backdrop"></div>
+    <div class="code-modal-box">
+      <div class="code-modal-head">
+        <span class="code-modal-title">▸ $SPCXBANK · KEEPER LOGIC</span>
+        <button class="code-modal-close" id="code-modal-close" aria-label="Close">×</button>
+      </div>
+      <pre class="code-modal-body"><span class="code-comment">// Bot runs every 5 minutes. Open-source. Fully auditable.</span>
+<span class="code-comment">// Below is the representative pseudo-code of the protocol's</span>
+<span class="code-comment">// keeper loop. Production code is published on GitHub at launch.</span>
+
+const TREASURY  = <span class="code-str">'GRefsnCKo9QELRL7L2bQnkKM6u1Y16VgmkX8U4HDAcFT'</span>;
+const QQQX_MINT = <span class="code-str">'Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ'</span>;
+const PUMPFUN   = <span class="code-str">'6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P'</span>;
+const MIN_SOL   = <span class="code-num">0.05</span>;   <span class="code-comment">// skip cycle if too little SOL (avoid slippage)</span>
+
+async function runCycle() {
+
+  <span class="code-comment">// 1. Scan recent txs landing in the treasury wallet</span>
+  const txs = await rpc.getSignaturesForAddress(TREASURY);
+
+  <span class="code-comment">// 2. Sum SOL inflows that came from pump.fun creator-fee claims</span>
+  <span class="code-comment">//    (manual claims by the operator land here the same way)</span>
+  let feeSol = 0;
+  for (const tx of txs) {
+    if (calledBy(tx, PUMPFUN)) {
+      feeSol += extractSolTransfer(tx, TREASURY);
+    }
+  }
+
+  <span class="code-comment">// 3. Skip the cycle if accumulated SOL is too small</span>
+  if (feeSol &lt; MIN_SOL) return;
+
+  <span class="code-comment">// 4. Swap SOL → QQQx via Jupiter's best route</span>
+  const route = await jupiter.getRoute({
+    inputMint:  SOL_MINT,
+    outputMint: QQQX_MINT,
+    amount:     feeSol * LAMPORTS_PER_SOL,
+  });
+  const { outAmount } = await jupiter.swap(route);
+
+  <span class="code-comment">// 5. Snapshot $SPCXBANK holders + balances at this block</span>
+  const holders = await helius.getTokenHolders(SPCXBANK_MINT);
+  const supply  = holders.reduce((s, h) =&gt; s + h.balance, <span class="code-num">0</span>);
+
+  <span class="code-comment">// 6. Compute pro-rata share + batch-transfer QQQx to each wallet</span>
+  const drops = holders.map(h =&gt; ({
+    to:     h.address,
+    amount: (h.balance / supply) * outAmount,
+  }));
+  await batchTransfer(drops, QQQX_MINT);
+
+  <span class="code-comment">// 7. Done. Next cycle in 5 min.</span>
+}
+
+setInterval(runCycle, <span class="code-num">5 * 60 * 1000</span>);
+</pre>
+      <div class="code-modal-foot">
+        <span class="code-modal-foot-tag">SOURCE</span>
+        <span>Open-sourced at launch</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="solana.js"></script>
+  <script src="main.js"></script>
+  <script src="charts.js"></script>
+</body>
+</html>
