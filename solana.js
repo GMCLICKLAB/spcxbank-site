@@ -289,12 +289,23 @@ async function getTreasuryEnhancedTxs(limit = 100) {
   }
 }
 
-// Extract all QQQx transfers from treasury tx history.
-// direction: 'out' (treasury→others, = distributions to holders)
+// Extract QQQx transfers from treasury tx history.
+// direction: 'out' (treasury→others, = real distributions to holders)
 //         or 'in'  (others→treasury, = jupiter swap outputs / refills)
+//
+// IMPORTANT: SWAP-type txs include intermediate hops where treasury
+// temporarily sends QQQx into a Jupiter route account and gets it back.
+// Those are NOT real distributions/purchases — only the net flow matters.
+// We skip SWAP transactions for the OUT direction so the dashboard only
+// counts QQQx that actually left treasury and never came back.
+// IN direction: Jupiter swaps DO end with QQQx entering treasury — that's
+// the legitimate purchase outcome, so we include SWAP txs but de-dup by
+// using NET flow (sum of all transfers per tx). The caller can pre-filter.
 function extractQqqxTransfers(txs, direction) {
   const out = [];
   for (const tx of txs) {
+    // For outgoing distributions: ignore swaps entirely.
+    if (direction === 'out' && tx.type === 'SWAP') continue;
     for (const t of (tx.tokenTransfers || [])) {
       if (t.mint !== QQQX_MINT) continue;
       const isOut = t.fromUserAccount === TREASURY_WALLET;
