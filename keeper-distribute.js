@@ -113,8 +113,13 @@ async function main() {
   //   • the treasury itself (circular waste)
   //   • any program-derived smart-contract wallet
   // PDAs are off the Ed25519 curve. Real user wallets are on-curve.
+  // Belt-and-suspenders: explicit deny-list for known pool / DEX wallets.
+  const DENY = new Set([
+    TREASURY_WALLET,
+    '4gdi9pkY7xWwpVSo7zmGeBtMXhu91oo8cFwJsFdtRmcX', // pump.fun bonding curve LP wallet
+  ]);
   const holders = rawHolders.filter(h => {
-    if (h.owner === TREASURY_WALLET) return false;
+    if (DENY.has(h.owner)) return false;
     try { if (!PublicKey.isOnCurve(new PublicKey(h.owner).toBytes())) return false; }
     catch (_) { return false; }
     return true;
