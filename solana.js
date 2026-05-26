@@ -17,6 +17,12 @@ const SPCXBANK_MINT   = 'FEaM9Pj1T95BqficUrZm9EaXx7fR8sbgBMLgggR4pump'; // ⟵ L
 // QQQx (Backed Finance · Nasdaq-100 tokenized ETF) on Solana.
 const QQQX_MINT       = 'Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ';
 
+// Both $SPCXBANK (pump.fun) and QQQx (Backed) are deployed on the new
+// Token-2022 program, NOT the classic SPL Token program. All token-account
+// queries below must pass this program ID explicitly — otherwise the RPC
+// only searches classic SPL Token and returns nothing.
+const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
+
 // Solana RPC — Helius mainnet endpoint (user's project key).
 // NOTE: This key is exposed to anyone who inspects the served JS. That is
 // the standard pattern for browser-side Solana apps. Lock down usage by
@@ -54,11 +60,12 @@ async function getTreasurySol() {
 async function getTreasuryQQQx() {
   const r = await rpc('getTokenAccountsByOwner', [
     TREASURY_WALLET,
-    { mint: QQQX_MINT },
+    { programId: TOKEN_2022_PROGRAM },
     { encoding: 'jsonParsed' },
   ]);
-  if (!r.value.length) return 0;
-  return parseFloat(r.value[0].account.data.parsed.info.tokenAmount.uiAmountString);
+  const match = (r.value || []).find(a => a.account.data.parsed.info.mint === QQQX_MINT);
+  if (!match) return 0;
+  return parseFloat(match.account.data.parsed.info.tokenAmount.uiAmountString);
 }
 
 // Recent signatures FROM the treasury wallet (powers distribution ledger
@@ -104,32 +111,31 @@ async function getSpcxbankPrice() {
 
 // ===== USER-WALLET READS (called after user connects in dashboard) =======
 
+// Helper: find a wallet's balance for a specific Token-2022 mint by
+// querying all of the wallet's Token-2022 accounts and filtering by mint.
+async function getUserToken2022Balance(wallet, mintStr) {
+  try {
+    const r = await rpc('getTokenAccountsByOwner', [
+      wallet,
+      { programId: TOKEN_2022_PROGRAM },
+      { encoding: 'jsonParsed' },
+    ]);
+    const match = (r.value || []).find(a => a.account.data.parsed.info.mint === mintStr);
+    if (!match) return 0;
+    return parseFloat(match.account.data.parsed.info.tokenAmount.uiAmountString);
+  } catch (e) { console.warn('getUserToken2022Balance', mintStr, e); return null; }
+}
+
 // Returns the connected wallet's $SPCXBANK balance, 0 if no token account,
 // or null pre-launch (mint not set).
 async function getUserSpcxbankBalance(wallet) {
   if (!SPCXBANK_MINT) return null;
-  try {
-    const r = await rpc('getTokenAccountsByOwner', [
-      wallet,
-      { mint: SPCXBANK_MINT },
-      { encoding: 'jsonParsed' },
-    ]);
-    if (!r.value.length) return 0;
-    return parseFloat(r.value[0].account.data.parsed.info.tokenAmount.uiAmountString);
-  } catch (e) { console.warn('getUserSpcxbankBalance', e); return null; }
+  return getUserToken2022Balance(wallet, SPCXBANK_MINT);
 }
 
 // Returns the connected wallet's QQQx balance, 0 if no token account.
 async function getUserQqqxBalance(wallet) {
-  try {
-    const r = await rpc('getTokenAccountsByOwner', [
-      wallet,
-      { mint: QQQX_MINT },
-      { encoding: 'jsonParsed' },
-    ]);
-    if (!r.value.length) return 0;
-    return parseFloat(r.value[0].account.data.parsed.info.tokenAmount.uiAmountString);
-  } catch (e) { console.warn('getUserQqqxBalance', e); return null; }
+  return getUserToken2022Balance(wallet, QQQX_MINT);
 }
 
 // Live QQQx USD price from DexScreener, fallback to Jupiter.
@@ -229,27 +235,31 @@ async function refreshSpcxbankMarketStats() {
   } catch (e) { console.warn('refreshSpcxbankMarketStats failed', e); }
 }
 
-// 2. $SPCXBANK holders count via RPC getProgramAccounts (Helius handles it).
+// 2. $SPCXBANK holders count via RPC getProgramAccounts on Token-2022.
 async function refreshSpcxbankHoldersCount() {
   if (!SPCXBANK_MINT) return;
   try {
+    // Token-2022 account size differs from classic (165) — use the standard
+    // Account-with-mint extension layout (~170 bytes for the basic case).
+    // Safer: omit dataSize filter and let memcmp on mint do the work.
     const accounts = await rpc('getProgramAccounts', [
-      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+      TOKEN_2022_PROGRAM,
       {
         filters: [
-          { dataSize: 165 },
           { memcmp: { offset: 0, bytes: SPCXBANK_MINT } },
         ],
         encoding: 'jsonParsed',
         commitment: 'confirmed',
       },
     ]);
-    const count = accounts.filter(a => {
-      const amt = parseFloat(a.account.data.parsed.info.tokenAmount.uiAmountString);
+    const count = (accounts || []).filter(a => {
+      const info = a.account?.data?.parsed?.info;
+      if (!info) return false;
+      const amt = parseFloat(info.tokenAmount?.uiAmountString || '0');
       return amt > 0;
     }).length;
     setStatValue('spcxbank-holders-stat', count.toLocaleString());
-    setStatDelta('spcxbank-holders-stat', count >= 2 ? 'WALLETS HOLDING' : 'WALLET HOLDING');
+    setStatDelta('spcxbank-holders-stat', count === 1 ? 'WALLET HOLDING' : 'WALLETS HOLDING');
   } catch (e) { console.warn('refreshSpcxbankHoldersCount failed', e); }
 }
 

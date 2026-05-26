@@ -58,9 +58,12 @@ const {
   getOrCreateAssociatedTokenAccount,
   getAssociatedTokenAddressSync,
   getAccount,
-  TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
 } = require('@solana/spl-token');
 const bs58 = require('bs58');
+
+// Both $SPCXBANK and QQQx are deployed on Token-2022, not classic SPL Token.
+const TOKEN_PROGRAM = TOKEN_2022_PROGRAM_ID;
 
 // ---- Config from env ---------------------------------------------------
 const HELIUS_RPC       = process.env.HELIUS_RPC;
@@ -92,8 +95,8 @@ async function main() {
   const conn = new Connection(HELIUS_RPC, 'confirmed');
 
   // ---- Fetch treasury's current QQQx balance --------------------------
-  const treasuryQqqxAta = getAssociatedTokenAddressSync(new PublicKey(QQQX_MINT), treasuryPk);
-  const treasuryQqqxAcc = await getAccount(conn, treasuryQqqxAta).catch(() => null);
+  const treasuryQqqxAta = getAssociatedTokenAddressSync(new PublicKey(QQQX_MINT), treasuryPk, false, TOKEN_PROGRAM);
+  const treasuryQqqxAcc = await getAccount(conn, treasuryQqqxAta, undefined, TOKEN_PROGRAM).catch(() => null);
   if (!treasuryQqqxAcc) bail('Treasury has no QQQx account yet — buy some QQQx first.');
   const treasuryQqqxRaw = BigInt(treasuryQqqxAcc.amount);
   const QQQX_DECIMALS = 8; // QQQx is 8 decimals on Solana
@@ -144,7 +147,7 @@ async function main() {
     const tx = new Transaction();
 
     for (const c of batch) {
-      const recipientAta = getAssociatedTokenAddressSync(new PublicKey(QQQX_MINT), new PublicKey(c.owner));
+      const recipientAta = getAssociatedTokenAddressSync(new PublicKey(QQQX_MINT), new PublicKey(c.owner), false, TOKEN_PROGRAM);
       // Note: relies on recipients already having a QQQx ATA. For first-time
       // recipients, prepend a createAssociatedTokenAccountInstruction(payer=treasury).
       // Doing it inline below for safety:
@@ -162,7 +165,7 @@ async function main() {
           treasuryPk,
           c.amountRaw,
           [],
-          TOKEN_PROGRAM_ID,
+          TOKEN_PROGRAM,
         ),
       );
     }
@@ -189,19 +192,19 @@ async function main() {
 // mint filter. Works on any Solana RPC but Helius is faster for large
 // holder sets (no public-RPC rate limit).
 async function fetchAllHolders(conn, mintStr) {
-  const filters = [
-    { dataSize: 165 },
-    { memcmp: { offset: 0, bytes: mintStr } },
-  ];
-  const accounts = await conn.getProgramAccounts(TOKEN_PROGRAM_ID, {
-    filters,
+  // Token-2022 account size varies (170+ depending on extensions). Skip
+  // dataSize filter and rely on memcmp on the mint field at offset 0.
+  const accounts = await conn.getProgramAccounts(TOKEN_PROGRAM, {
+    filters: [
+      { memcmp: { offset: 0, bytes: mintStr } },
+    ],
     encoding: 'base64',
     commitment: 'confirmed',
   });
   const holders = [];
   for (const a of accounts) {
     const data = a.account.data;
-    // SPL Token account layout: mint(32) | owner(32) | amount(8 LE u64) ...
+    if (data.length < 72) continue; // need at least mint(32) + owner(32) + amount(8)
     const owner  = new PublicKey(data.slice(32, 64)).toBase58();
     const amount = data.readBigUInt64LE(64);
     if (amount === 0n) continue;

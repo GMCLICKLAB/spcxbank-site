@@ -395,16 +395,13 @@ async function loadDistribsLedger() {
 // HOLDERS LEDGER · real on-chain fetcher (post-launch)
 // ============================================================
 async function loadHoldersLedger() {
-  const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
   try {
     // 1. Fetch every $SPCXBANK token account via jsonParsed encoding.
-    //    Public RPC will rate-limit hard — Helius highly recommended
-    //    (set SOLANA_RPC in solana.js to your Helius mainnet endpoint).
+    //    SPCXBANK is on Token-2022 (TokenzQdBN...), not classic SPL Token.
     const accounts = await rpc('getProgramAccounts', [
-      TOKEN_PROGRAM,
+      TOKEN_2022_PROGRAM,
       {
         filters: [
-          { dataSize: 165 },
           { memcmp: { offset: 0, bytes: SPCXBANK_MINT } },
         ],
         encoding: 'jsonParsed',
