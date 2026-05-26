@@ -104,24 +104,40 @@ async function main() {
   console.log('▸ treasury QQQx balance:', treasuryQqqxUi.toFixed(6));
   if (treasuryQqqxUi <= 0) bail('Nothing to distribute.');
 
-  // ---- Snapshot all $SPCXBANK holders via Helius ----------------------
-  // Uses Helius `getTokenAccounts` DAS endpoint (paginated).
+  // ---- Snapshot all $SPCXBANK holders ---------------------------------
   console.log('▸ snapshotting $SPCXBANK holders ...');
-  const holders = await fetchAllHolders(conn, SPCXBANK_MINT);
-  const totalSupply = holders.reduce((s, h) => s + h.amount, 0);
-  console.log(`▸ found ${holders.length} holders · total balance ${totalSupply}`);
-  if (totalSupply === 0n) bail('Total holder balance is zero — nothing to distribute against.');
+  const rawHolders = await fetchAllHolders(conn, SPCXBANK_MINT);
+
+  // CRITICAL FILTERS — without these you would airdrop QQQx to:
+  //   • the pump.fun bonding curve PDA (80%+ of supply early on)
+  //   • the treasury itself (circular waste)
+  //   • any program-derived smart-contract wallet
+  // PDAs are off the Ed25519 curve. Real user wallets are on-curve.
+  const holders = rawHolders.filter(h => {
+    if (h.owner === TREASURY_WALLET) return false;
+    try { if (!PublicKey.isOnCurve(new PublicKey(h.owner).toBytes())) return false; }
+    catch (_) { return false; }
+    return true;
+  });
+  const excluded = rawHolders.length - holders.length;
+  console.log(`▸ raw token accounts: ${rawHolders.length}`);
+  console.log(`▸ excluded (treasury + PDAs / curves): ${excluded}`);
+  console.log(`▸ real-user holders for distribution: ${holders.length}`);
+
+  const totalSupply = holders.reduce((s, h) => s + h.amount, 0n);
+  console.log(`▸ total $SPCXBANK held by real users: ${(Number(totalSupply) / 1e6).toLocaleString()}`);
+  if (totalSupply === 0n) bail('No real-user holders to distribute to.');
 
   // ---- Compute each holder's QQQx cut ---------------------------------
-  // qqqx_for_holder = holder_balance * treasury_qqqx_raw / total_supply
-  const totalSupplyBig = holders.reduce((s, h) => s + BigInt(h.amount), 0n);
+  // qqqx_for_holder = holder_balance * treasury_qqqx_raw / total_filtered_supply
+  // Note totalSupply here is the sum of REAL-USER balances only (no pool / PDA).
   const cuts = holders
     .map(h => {
-      const cutRaw = BigInt(h.amount) * treasuryQqqxRaw / totalSupplyBig;
+      const cutRaw = h.amount * treasuryQqqxRaw / totalSupply;
       const cutUi  = Number(cutRaw) / 10 ** QQQX_DECIMALS;
       return { owner: h.owner, amountRaw: cutRaw, amountUi: cutUi };
     })
-    .filter(c => c.amountUi >= MIN_QQQX); // skip dust
+    .filter(c => c.amountUi >= MIN_QQQX);
 
   const totalToSendRaw = cuts.reduce((s, c) => s + c.amountRaw, 0n);
   const totalToSendUi  = Number(totalToSendRaw) / 10 ** QQQX_DECIMALS;
