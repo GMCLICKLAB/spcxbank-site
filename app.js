@@ -302,12 +302,93 @@ if (!LEDGER_DEMO_MODE) {
   renderEmptyLedgerRows('purchase-rows', 5); // SOURCE / SOL IN / QQQx OUT / WHEN / solscan
 
   // Post-launch (mint is set): swap empty rows for live data.
-  // Distributions + purchases fetchers will be added on CA day (need real
-  // tx data to verify Helius enhanced-tx parsing). Holders works today —
-  // it only needs getProgramAccounts which is mint-agnostic structurally.
   if (typeof SPCXBANK_MINT !== 'undefined' && SPCXBANK_MINT) {
     loadHoldersLedger();
+    loadPurchasesLedger();
+    loadDistribsLedger();
+    setInterval(() => {
+      loadHoldersLedger();
+      loadPurchasesLedger();
+      loadDistribsLedger();
+    }, 30_000);
   }
+}
+
+// ============================================================
+// QQQx PURCHASES ledger — treasury bought QQQx via Jupiter
+// ============================================================
+async function loadPurchasesLedger() {
+  try {
+    const txs = await getTreasuryEnhancedTxs(100);
+    const buys = extractTreasuryJupiterBuys(txs);
+    if (!buys.length) return; // keep empty skeleton rows
+    const rows = buys
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .map(b => ({
+        ...b,
+        secAgo: Math.max(0, Math.floor(Date.now() / 1000 - b.timestamp)),
+      }));
+    makeLedgerPager('ledger-purchase', rows, p => `
+      <div class="bet-item">
+        <span class="bet-claim"><span class="bet-tag">SWAP</span>jupiter route · SOL → QQQx</span>
+        <span class="bet-stake">${p.solIn.toFixed(3)} SOL</span>
+        <span class="bet-deadline">${p.qqqxOut.toFixed(4)} QQQx</span>
+        <span class="bet-status">${ago(p.secAgo)}</span>
+        <a class="bet-action" href="https://solscan.io/tx/${p.signature}" target="_blank" rel="noopener">solscan</a>
+      </div>`);
+  } catch (e) { console.warn('loadPurchasesLedger failed', e); }
+}
+
+// ============================================================
+// DISTRIBUTIONS ledger — each row = one QQQx transfer FROM treasury
+// Rows grouped naturally by signature/timestamp — same sweep round
+// will have many rows sharing a timestamp ~within seconds.
+// ============================================================
+async function loadDistribsLedger() {
+  try {
+    const txs    = await getTreasuryEnhancedTxs(100);
+    const outs   = extractQqqxTransfers(txs, 'out');
+    if (!outs.length) return; // keep empty skeleton rows
+    const supply = await getSpcxbankSupply().catch(() => null);
+
+    // Group by signature (one tx = one round). Each transfer in a round
+    // is one row. fanOut = # of transfers in the same round.
+    const bySig = new Map();
+    for (const t of outs) {
+      if (!bySig.has(t.signature)) bySig.set(t.signature, []);
+      bySig.get(t.signature).push(t);
+    }
+    // Assign round numbers (newest = highest #). We don't know the on-chain
+    // round count globally, so use the index in the sorted distinct sig list.
+    const sigsSorted = [...bySig.entries()]
+      .sort((a, b) => b[1][0].timestamp - a[1][0].timestamp)
+      .map(([sig], i, arr) => ({ sig, roundNum: arr.length - i }));
+    const sigRound = new Map(sigsSorted.map(s => [s.sig, s.roundNum]));
+
+    // Flatten into individual rows + each holder's pro-rata share (need to
+    // fetch their $SPCXBANK balance — for now we leave SHARE as "—").
+    const rows = outs
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .map(t => ({
+        signature: t.signature,
+        roundNum:  sigRound.get(t.signature),
+        fanOut:    bySig.get(t.signature).length,
+        recipient: t.to,
+        qqqx:      t.amount,
+        secAgo:    Math.max(0, Math.floor(Date.now() / 1000 - t.timestamp)),
+      }));
+
+    makeLedgerPager('ledger-distrib', rows, d => `
+      <div class="bet-item">
+        <span class="bet-deadline">#${String(d.roundNum).padStart(4,'0')}</span>
+        <span class="bet-deadline">${d.fanOut.toLocaleString()}</span>
+        <span class="bet-claim">${shortAddr(d.recipient)}</span>
+        <span class="bet-stake">${d.qqqx.toFixed(4)} QQQx</span>
+        <span class="bet-stake">—</span>
+        <span class="bet-status">${ago(d.secAgo)}</span>
+        <a class="bet-action" href="https://solscan.io/tx/${d.signature}" target="_blank" rel="noopener">solscan</a>
+      </div>`);
+  } catch (e) { console.warn('loadDistribsLedger failed', e); }
 }
 
 // ============================================================
@@ -505,19 +586,6 @@ let connected = false;
 
 const MY_ROW_IDS = ['my-t15','my-share','my-qqqx','my-usd'];
 
-// ============================================================
-// DEMO_MODE — preview post-launch UI without a real mint.
-// SPCXBANK numbers are mocked (token not yet deployed); QQQx
-// balance is mocked but price is fetched live from-chain.
-// Flip back to false once we revert to "wait for CA" state.
-// ============================================================
-const DEMO_MODE = false;
-const DEMO_DATA = {
-  spcxbankBalance: 4_283_217,
-  spcxbankSupply:  1_000_000_000,
-  qqqxBalance:     412.8374,
-};
-
 function setRows(text) {
   MY_ROW_IDS.forEach(id => {
     const el = document.getElementById(id);
@@ -526,32 +594,6 @@ function setRows(text) {
 }
 
 async function loadMyPosition(addr) {
-  // DEMO preview — pretend the token is live and the wallet holds some.
-  if (DEMO_MODE) {
-    const d = DEMO_DATA;
-    document.getElementById('my-t15').textContent   = d.spcxbankBalance.toLocaleString() + ' $SPCXBANK';
-    document.getElementById('my-share').textContent = ((d.spcxbankBalance / d.spcxbankSupply) * 100).toFixed(4) + '%';
-    document.getElementById('my-qqqx').textContent  = d.qqqxBalance.toFixed(4) + ' QQQx';
-    // Live QQQx price → real USD value
-    try {
-      const qqqxPx = await getQqqxPriceUsd();
-      if (qqqxPx !== null) {
-        const usd = d.qqqxBalance * qqqxPx;
-        document.getElementById('my-usd').textContent = '$' + usd.toLocaleString(undefined, { maximumFractionDigits: 2 });
-      } else {
-        document.getElementById('my-usd').textContent = '—';
-      }
-    } catch (_) {
-      document.getElementById('my-usd').textContent = '—';
-    }
-    return;
-  }
-
-  // Pre-launch: token mint not yet set — be honest, show PRE-LAUNCH.
-  if (typeof SPCXBANK_MINT === 'undefined' || !SPCXBANK_MINT) {
-    setRows('PRE-LAUNCH');
-    return;
-  }
   try {
     const [bal, supply, qqqxBal, qqqxPx] = await Promise.all([
       getUserSpcxbankBalance(addr),

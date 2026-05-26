@@ -173,6 +173,201 @@ async function snapshotOnChain() {
   return base;
 }
 
+// ===== LIVE STAT-CARD UPDATERS (run on every page that loads solana.js) ==
+// Wires the 4 $SPCXBANK ON-CHAIN DATA cards (price / mcap / holders / 24h
+// vol) + 2 DISTRIBUTED cards from DexScreener + Helius. Both index.html
+// and app.html share the same IDs so this single fetcher updates both.
+
+function fmtCompactUsd(n) {
+  if (!isFinite(n) || n <= 0) return '—';
+  if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+  if (n >= 1)   return '$' + n.toFixed(2);
+  return '$' + n.toFixed(6);
+}
+function setStatValue(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+function setStatDelta(valueId, text) {
+  const v = document.getElementById(valueId);
+  const card = v && v.parentElement;
+  const delta = card && card.querySelector('.stat-delta');
+  if (delta) delta.textContent = text;
+}
+
+// 1. $SPCXBANK price / mcap / 24h vol via DexScreener
+async function refreshSpcxbankMarketStats() {
+  if (!SPCXBANK_MINT) return;
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${SPCXBANK_MINT}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const pair = data?.pairs?.[0];
+    if (!pair) return;
+
+    const priceUsd = parseFloat(pair.priceUsd);
+    const mcap     = parseFloat(pair.fdv || pair.marketCap); // for pump.fun, FDV = mcap (fixed 1B supply)
+    const vol24h   = parseFloat(pair?.volume?.h24);
+    const ch24     = parseFloat(pair?.priceChange?.h24);
+
+    if (isFinite(priceUsd) && priceUsd > 0) {
+      setStatValue('spcxbank-price-stat', fmtCompactUsd(priceUsd));
+      if (isFinite(ch24)) {
+        setStatDelta('spcxbank-price-stat', (ch24 >= 0 ? '▲ +' : '▼ ') + Math.abs(ch24).toFixed(2) + '% · 24H');
+      }
+    }
+    if (isFinite(mcap) && mcap > 0) {
+      setStatValue('spcxbank-mcap-stat', fmtCompactUsd(mcap));
+      setStatDelta('spcxbank-mcap-stat', 'PRICE × 1B SUPPLY');
+    }
+    if (isFinite(vol24h) && vol24h > 0) {
+      setStatValue('spcxbank-vol-stat', fmtCompactUsd(vol24h));
+      setStatDelta('spcxbank-vol-stat', 'LAST 24H');
+    }
+  } catch (e) { console.warn('refreshSpcxbankMarketStats failed', e); }
+}
+
+// 2. $SPCXBANK holders count via RPC getProgramAccounts (Helius handles it).
+async function refreshSpcxbankHoldersCount() {
+  if (!SPCXBANK_MINT) return;
+  try {
+    const accounts = await rpc('getProgramAccounts', [
+      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+      {
+        filters: [
+          { dataSize: 165 },
+          { memcmp: { offset: 0, bytes: SPCXBANK_MINT } },
+        ],
+        encoding: 'jsonParsed',
+        commitment: 'confirmed',
+      },
+    ]);
+    const count = accounts.filter(a => {
+      const amt = parseFloat(a.account.data.parsed.info.tokenAmount.uiAmountString);
+      return amt > 0;
+    }).length;
+    setStatValue('spcxbank-holders-stat', count.toLocaleString());
+    setStatDelta('spcxbank-holders-stat', count >= 2 ? 'WALLETS HOLDING' : 'WALLET HOLDING');
+  } catch (e) { console.warn('refreshSpcxbankHoldersCount failed', e); }
+}
+
+// ===== TREASURY ENHANCED TX (Helius parsed transactions) =================
+// Single source of truth for everything DISTRIBUTIONS / PURCHASES related.
+// Helius parses SPL token transfers + Jupiter swaps for us — much cleaner
+// than calling getTransaction() per signature.
+
+const HELIUS_API_KEY = SOLANA_RPC.split('api-key=')[1] || '';
+let _treasuryTxCache = null;
+let _treasuryTxFetchedAt = 0;
+const TREASURY_TX_CACHE_MS = 25_000; // 25s — multiple consumers share one fetch
+
+async function getTreasuryEnhancedTxs(limit = 100) {
+  const now = Date.now();
+  if (_treasuryTxCache && (now - _treasuryTxFetchedAt) < TREASURY_TX_CACHE_MS) return _treasuryTxCache;
+  try {
+    const url = `https://api.helius.xyz/v0/addresses/${TREASURY_WALLET}/transactions?api-key=${HELIUS_API_KEY}&limit=${limit}`;
+    const res = await fetch(url);
+    if (!res.ok) return _treasuryTxCache || [];
+    _treasuryTxCache = await res.json();
+    _treasuryTxFetchedAt = now;
+    return _treasuryTxCache;
+  } catch (e) {
+    console.warn('getTreasuryEnhancedTxs failed', e);
+    return _treasuryTxCache || [];
+  }
+}
+
+// Extract all QQQx transfers from treasury tx history.
+// direction: 'out' (treasury→others, = distributions to holders)
+//         or 'in'  (others→treasury, = jupiter swap outputs / refills)
+function extractQqqxTransfers(txs, direction) {
+  const out = [];
+  for (const tx of txs) {
+    for (const t of (tx.tokenTransfers || [])) {
+      if (t.mint !== QQQX_MINT) continue;
+      const isOut = t.fromUserAccount === TREASURY_WALLET;
+      const isIn  = t.toUserAccount   === TREASURY_WALLET;
+      if (direction === 'out' && !isOut) continue;
+      if (direction === 'in'  && !isIn)  continue;
+      out.push({
+        signature: tx.signature,
+        timestamp: tx.timestamp,
+        type:      tx.type,
+        source:    tx.source,
+        from:      t.fromUserAccount,
+        to:        t.toUserAccount,
+        amount:    parseFloat(t.tokenAmount),
+      });
+    }
+  }
+  return out;
+}
+
+// Sum SOL spent in Jupiter swaps where Treasury bought QQQx (for PURCHASES rows).
+function extractTreasuryJupiterBuys(txs) {
+  const buys = [];
+  for (const tx of txs) {
+    if (tx.source !== 'JUPITER') continue;
+    let solOut = 0;
+    let qqqxIn = 0;
+    for (const t of (tx.tokenTransfers || [])) {
+      if (t.fromUserAccount === TREASURY_WALLET && t.mint === 'So11111111111111111111111111111111111111112') {
+        solOut += parseFloat(t.tokenAmount);
+      }
+      if (t.toUserAccount === TREASURY_WALLET && t.mint === QQQX_MINT) {
+        qqqxIn += parseFloat(t.tokenAmount);
+      }
+    }
+    // Also count native SOL transfers (some Jupiter routes use native SOL not wrapped)
+    for (const nat of (tx.nativeTransfers || [])) {
+      if (nat.fromUserAccount === TREASURY_WALLET) solOut += (nat.amount || 0) / 1e9;
+    }
+    if (qqqxIn > 0 && solOut > 0) {
+      buys.push({
+        signature: tx.signature,
+        timestamp: tx.timestamp,
+        solIn: solOut,
+        qqqxOut: qqqxIn,
+      });
+    }
+  }
+  return buys;
+}
+
+// DISTRIBUTED · QQQx + USD stat cards.
+async function refreshDistributedStats() {
+  if (!SPCXBANK_MINT) return;
+  try {
+    const [txs, qqqxPx] = await Promise.all([
+      getTreasuryEnhancedTxs(100),
+      getQqqxPriceUsd(),
+    ]);
+    const out = extractQqqxTransfers(txs, 'out');
+    const totalQqqx = out.reduce((s, t) => s + t.amount, 0);
+    const totalUsd  = qqqxPx ? totalQqqx * qqqxPx : 0;
+
+    setStatValue('distributed-qqqx-stat', totalQqqx > 0 ? totalQqqx.toFixed(2) : '0');
+    setStatDelta('distributed-qqqx-stat', totalQqqx > 0 ? `ACROSS ${out.length} TRANSFERS` : 'AWAITING FIRST SWEEP');
+
+    setStatValue('distributed-usd-stat', totalUsd > 0 ? fmtCompactUsd(totalUsd) : '$0');
+    setStatDelta('distributed-usd-stat', totalQqqx > 0 ? 'AT CURRENT QQQx PRICE' : 'AWAITING FIRST SWEEP');
+  } catch (e) { console.warn('refreshDistributedStats failed', e); }
+}
+
+// Run all refreshers on load + every 30s.
+function refreshAllSpcxbankStats() {
+  refreshSpcxbankMarketStats();
+  refreshSpcxbankHoldersCount();
+  refreshDistributedStats();
+}
+if (SPCXBANK_MINT) {
+  refreshAllSpcxbankStats();
+  setInterval(refreshAllSpcxbankStats, 30000);
+}
+
+
 // ===== NOTES FOR LAUNCH ==================================================
 // Wire-up checklist when the mint goes live:
 //   1. Set SPCXBANK_MINT above to the real address.
