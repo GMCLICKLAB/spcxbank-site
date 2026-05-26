@@ -358,6 +358,29 @@ function __fmtCompactUsd(n) {
   if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
   return '$' + n.toFixed(2);
 }
+// SPCXBANK MCAP + 24H VOL via DexScreener (refreshed every minute, cached).
+let __spcxInfo = null;
+let __spcxFetchedAt = 0;
+async function fetchSpcxMcapVol() {
+  if (typeof SPCXBANK_MINT === 'undefined' || !SPCXBANK_MINT) return null;
+  const now = Date.now();
+  if (__spcxInfo && (now - __spcxFetchedAt) < 60_000) return __spcxInfo;
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${SPCXBANK_MINT}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const pair = data?.pairs?.[0];
+    if (!pair) return null;
+    __spcxInfo = {
+      mcap:   parseFloat(pair.fdv || pair.marketCap) || null,
+      vol24h: parseFloat(pair?.volume?.h24) || null,
+    };
+    __spcxFetchedAt = now;
+    return __spcxInfo;
+  } catch (_) {}
+  return null;
+}
+
 let __qqqxInfo = null;
 async function fetchQqqxMcapVol() {
   if (__qqqxInfo) return __qqqxInfo;
@@ -395,18 +418,20 @@ async function updateChartToolbarInfo(activeKey) {
   const mcapEl = document.getElementById('chart-mcap');
   const volEl  = document.getElementById('chart-vol');
   if (!mcapEl || !volEl) return;
+
+  const renderInfo = (info) => {
+    mcapEl.textContent = (info && info.mcap)   ? __fmtCompactUsd(info.mcap)   : '—';
+    volEl.textContent  = (info && info.vol24h) ? __fmtCompactUsd(info.vol24h) : '—';
+  };
+
   if (activeKey === 'qqqx') {
-    const info = await fetchQqqxMcapVol();
-    if (info) {
-      mcapEl.textContent = info.mcap   ? __fmtCompactUsd(info.mcap)   : '—';
-      volEl.textContent  = info.vol24h ? __fmtCompactUsd(info.vol24h) : '—';
-    } else {
-      mcapEl.textContent = '—';
-      volEl.textContent  = '—';
-    }
+    renderInfo(await fetchQqqxMcapVol());
+  } else if (activeKey === 'spcxbank') {
+    renderInfo(await fetchSpcxMcapVol());
   } else {
-    mcapEl.textContent = 'PRE-LAUNCH';
-    volEl.textContent  = 'PRE-LAUNCH';
+    // HOLDERS / DIST tabs — these aren't priced assets so MCAP/VOL is N/A.
+    mcapEl.textContent = '—';
+    volEl.textContent  = '—';
   }
 }
 // Pre-warm and populate the toolbar with live QQQx data on load (since
