@@ -12,7 +12,7 @@ const TREASURY_WALLET = 'GRefsnCKo9QELRL7L2bQnkKM6u1Y16VgmkX8U4HDAcFT';
 
 // $SPCXBANK token mint — null until launch. Set this to enable holder /
 // supply / per-holder allocation reads.
-const SPCXBANK_MINT   = null; // ⟵ FILL IN AT LAUNCH
+const SPCXBANK_MINT   = 'FEaM9Pj1T95BqficUrZm9EaXx7fR8sbgBMLgggR4pump'; // ⟵ LIVE 2026-05-26
 
 // QQQx (Backed Finance · Nasdaq-100 tokenized ETF) on Solana.
 const QQQX_MINT       = 'Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ';
